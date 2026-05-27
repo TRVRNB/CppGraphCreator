@@ -2,13 +2,15 @@
 #include <string>
 #include <map> // associative array / dict
 #include <vector>
+#include <cmath> // for INFINITY
+#include <ranges> // lets me iterate over map keys
 #include "terminal_format.cpp"
 // NOTE:
-// this program uses several fairly new C++ features
+// this program uses some fairly new C++ features
 // make sure your GCC (or any other compiler) is updated
-// then, if your default C++ version is lower than C++20:
+// then, if your default C++ version is lower than C++20 (mine is C++17):
 // g++ -std=c++20 main.cpp -o a
-// you can also use C++23, 26, etc. (GCC already has experimental support for C++26)
+// you can also use C++23, 26, etc. (GCC already has experimental support for C++26 to my knowledge)
 //
 // C++ Graph Creator
 // github.com/TRVRNB/CppGraphCreator.git
@@ -32,13 +34,16 @@ namespace Graph {
     string label;
     Node(unsigned short self_index1, string label1); // constructor
     void print_connections();
-    float get_connection(unsigned short index);
-    void set_connection(unsigned short index, float strength); 
+    float get_connection(unsigned short index); // returns weight
+    void set_connection(unsigned short index, float weight);
+    void remove_dead_connections();
   protected:
     map<Node*, float> connections = {}; // populate this with connections to other nodes (node pointer is key)
   };
   vector<Node*> nodes; // unwrapped vector to every node (use this to convert index to pointer)
-  string version = "1.0";
+  void update_connections();
+  const string version = "1.1";
+  const float default_weight = INFINITY; // untraversable weight
 }
 
 Graph::Node::Node(unsigned short self_index1, string label1){
@@ -53,7 +58,7 @@ float Graph::Node::get_connection(unsigned short index){
   if (index == self_index){
     return -10.0;
   }
-  Node* current_node = Graph::nodes[index];
+  Node* current_node = nodes[index];
   if (connections.contains(current_node)){
     return connections[current_node];
   } else {
@@ -67,9 +72,42 @@ void Graph::Node::set_connection(unsigned short index, float strength){
     cout << RED << "Can't set self-connection." << RESET << endl;
     return;
   }
-  Node* current_node = Graph::nodes[index];
+  Node* current_node = nodes[index];
   if (!connections.contains(current_node)) connections[current_node] = strength;
   else cout << RED << "There is already a connection between these nodes." << RESET << endl;
+}
+
+bool contains(vector<Graph::Node*> to_check, Graph::Node* to_find){
+  // O(n) vector search
+  // i wanted to use std::any, which works in C++17 and after, this already requires C++20, but any doesn't support direct comparison (even if both data types are identical)
+  for (Graph::Node* x : to_check)
+    if (x == to_find)
+      return true;
+  return false;
+}
+
+void Graph::Node::remove_dead_connections(){
+  while (connections.size() > nodes.size()){
+    // find which keys don't exist
+    for (Node* key : views::keys(connections)) // std::ranges is needed for this
+      if (!contains(nodes, key)) // this node doesn't exist anymore
+	  connections.erase(key);
+  }
+}
+
+
+  
+void Graph::update_connections(){
+  // call this when a node is added or deleted
+  // iterates over every node in Graph::nodes, adds missing connections (with default weight) and removes connections that should not exist
+  for (Node* current_node : nodes){
+    // first, make sure every single connection exists
+    for (int i = 0; i < nodes.size(); i++)
+      if (current_node->get_connection(i) == -1.0)
+	current_node->set_connection(i, default_weight); 
+    // now, make sure no invalid connections exist
+    current_node->remove_dead_connections();
+  }
 }
 
 int main(){
