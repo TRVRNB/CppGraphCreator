@@ -42,7 +42,7 @@ namespace Graph {
   };
   vector<Node*> nodes; // unwrapped vector to every node (use this to convert index to pointer)
   void update_connections();
-  const string version = "1.1";
+  const string version = "1.2";
   const float default_weight = INFINITY; // untraversable weight
 }
 
@@ -80,6 +80,7 @@ void Graph::Node::set_connection(unsigned short index, float strength){
 bool contains(vector<Graph::Node*> to_check, Graph::Node* to_find){
   // O(n) vector search
   // i wanted to use std::any, which works in C++17 and after, this already requires C++20, but any doesn't support direct comparison (even if both data types are identical)
+  // std::ranges probably has something for this, too
   for (Graph::Node* x : to_check)
     if (x == to_find)
       return true;
@@ -87,12 +88,14 @@ bool contains(vector<Graph::Node*> to_check, Graph::Node* to_find){
 }
 
 void Graph::Node::remove_dead_connections(){
-  while (connections.size() > nodes.size()){
-    // find which keys don't exist
-    for (Node* key : views::keys(connections)) // std::ranges is needed for this
-      if (!contains(nodes, key)) // this node doesn't exist anymore
-	  connections.erase(key);
-  }
+  // find which keys don't exist
+  vector<Node*> to_remove;
+  for (Node* key : views::keys(connections)) // std::ranges is needed for this
+    if (!contains(nodes, key)) // this node doesn't exist anymore
+    to_remove.push_back(key);
+  // remove these keys now
+  for (Node* key : to_remove)
+    connections.erase(key);
 }
 
 
