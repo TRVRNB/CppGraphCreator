@@ -2,7 +2,7 @@
 #include <string>
 #include <map> // associative array / dict
 #include <vector>
-#include <cmath> // for INFINITY
+#include <cmath> // for INFINITY and std:;round
 #include <ranges> // for std::views
 #include <algorithm> // for std::erase
 #include "terminal_format.cpp"
@@ -46,13 +46,14 @@ namespace Graph {
   Node* lookup_node(string); // look up node by label
   int lookup_index(Node*); // look up index by node
   void connect_nodes(string, string, float);
-  const string version = "1.4";
+  const string version = "1.5";
   const float default_weight = INFINITY; // untraversable weight
 }
 
 Graph::Node::Node(string label1){
   // node constructor
   label = label1;
+  connections[this] = 0.0; // self by reference
   cout << WHITE << "Node \'" << label1 << "\' created." << RESET << endl;
 }
 
@@ -65,6 +66,11 @@ float Graph::Node::get_connection(unsigned short index){
 
 void Graph::Node::set_connection(Node* current_node, float weight){
   // set this connection, if it is valid and doesn't already exist
+  if (current_node->label == label){
+    // these are the same node (assume nobody will reuse labels)
+    connections[current_node] = 0;
+    return;
+  }
   if (!connections.contains(current_node) || connections[current_node] == default_weight){
     connections[current_node] = weight;
     cout << WHITE << "Connection added between \'" << label << "\' and \'" << current_node->label << "\'." << RESET << endl;
@@ -106,10 +112,7 @@ void Graph::update_connections(){
     // first, make sure every single connection exists
     for (int i = 0; i < nodes.size(); i++)
       if (current_node->get_connection(i) == -1.0)
-	if (nodes[i] == current_node)
-	  current_node->set_connection(current_node, 0.0);
-	else
-	  current_node->set_connection(nodes[i], default_weight); 
+	current_node->set_connection(nodes[i], default_weight); 
     // now, make sure no invalid connections exist
     current_node->remove_dead_connections();
   }
@@ -119,7 +122,6 @@ void Graph::add_node(string label){
   // add a node to nodes with this label, no starting connections
   Node* new_node = new Node(label);
   nodes.push_back(new_node);
-  update_connections();
 }
 
 void Graph::connect_nodes(string label1, string label2, float weight){
@@ -141,6 +143,7 @@ void ADD(){
   Graph::add_node(input);
   if (Graph::nodes.size() == 2)
     cout << YELLOW << "Remember to add connections between your nodes!" << RESET << endl;
+  Graph::update_connections();
 }
 
 void CONNECT(bool connection_added){
@@ -203,11 +206,61 @@ void DISCONNECT(){
   Graph::connect_nodes(input, input1, Graph::default_weight);
 }
 
+string formatted_index(unsigned short index){
+  // format index to always fit the same amount of space
+  index++;
+  if (index < 10)
+    return "  " + to_string(index);
+  else if (index < 100)
+    return " " + to_string(index);
+  else
+    return to_string(index);
+  // this will break after 999 nodes have been added, but at that point (with adequate connections) the pathfinder will probably take years
+}
+
+string formatted_weight(float weight){
+  // format weight to always fit the same amount of space
+  if (weight >= 1000)
+    return "  ∞";
+  int iweight = round(weight); // weights will be displayed as int, so they should probably be entered as int
+  if (weight < 10)
+    return "  " + to_string(iweight);
+  else if (weight < 100)
+    return " " + to_string(iweight);
+  else
+    return to_string(iweight);
+}
+
+
+void PRINT(){
+  // PRINT function
+  for (int i = 0; i < Graph::nodes.size(); i++)
+    // first, print the index of every node
+    cout << BLUE << (i+1) << ") " << WHITE << Graph::nodes[i]->label << endl;
+  cout << WHITE << "---";
+  for (int i = 0; i < Graph::nodes.size(); i++)
+    cout << "----";
+  cout << endl;
+  // print adjacency line for a nonexistent node
+  cout << "   " << WHITE;
+  for (int i = 0; i < Graph::nodes.size(); i++)
+    cout << ' ' << formatted_index(i);
+  cout << endl;
+  // print adjacency line for nodes
+  for (int i = 0; i < Graph::nodes.size(); i++){
+    Graph::Node* current_node = Graph::nodes[i];
+    cout << WHITE << formatted_index(i) << RESET;
+    for (int j = 0; j < Graph::nodes.size(); j++)
+      cout << ' ' << formatted_weight(current_node->get_connection(j));
+    cout << endl;
+  }
+}
+
 int main(){
   cout << YELLOW << "C++ Graph Creator - " << RESET << RED << "Version " << Graph::version << RESET << endl;
   cout << WHITE << "Type \'HELP\' for a list of commands." << endl;
   map<string, unsigned short> commands;
-  commands["HELP"] = 1; commands["ADD"] = 2; commands["CONNECT"] = 3; commands["REMOVE"] = 4; commands["DISCONNECT"] = 5;
+  commands["HELP"] = 1; commands["ADD"] = 2; commands["CONNECT"] = 3; commands["REMOVE"] = 4; commands["DISCONNECT"] = 5; commands["PRINT"] = 6;
   // ^ could use an enum for these values, after some point i might be overengineering this, a long if/else statement would work anyway
   string input;
   bool connection_added = false;
@@ -233,6 +286,7 @@ int main(){
 	"CONNECT: add a connection (line) between two vertices" << '\n' <<
 	"REMOVE: remove a node (vertex) from the graph" << '\n' <<
 	"DISCONNECT: remove a connection (line) from two nodes" << '\n' <<
+	"PRINT: print the adjacency table" << '\n' <<
 	endl;
       break;
       
@@ -251,6 +305,10 @@ int main(){
 
     case 5:
       DISCONNECT();
+      break;
+
+    case 6:
+      PRINT();
       break;
       
     }
