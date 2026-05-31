@@ -16,7 +16,7 @@
 // C++ Graph Creator
 // github.com/TRVRNB/CppGraphCreator.git
 // weighted graph (with one-way connections)
-// uses Dijkstra's algorithm for traversal (treat weight as distance, similar-ish to Wandering Salesmand but nodes can be revisited?)
+// uses Dijkstra's algorithm for traversal (treat weight as distance)
 // use adjacency table
 // EXAMPLE:
 //     01  02  03  04
@@ -46,7 +46,10 @@ namespace Graph {
   Node* lookup_node(string); // look up node by label
   int lookup_index(Node*); // look up index by node
   void connect_nodes(string, string, float);
-  const string version = "1.5";
+  Node* find_smallest_distance(map<Node*, float>, const vector<Node*>);
+  vector<Node*> dijkstra(Node*, Node*);
+  float total_weight = 0.0;
+  const string version = "1.6";
   const float default_weight = INFINITY; // untraversable weight
 }
 
@@ -71,9 +74,12 @@ void Graph::Node::set_connection(Node* current_node, float weight){
     connections[current_node] = 0;
     return;
   }
-  if (!connections.contains(current_node) || connections[current_node] == default_weight){
+  if (!connections.contains(current_node) || (connections[current_node] == default_weight || weight >= 1000)){
     connections[current_node] = weight;
-    cout << WHITE << "Connection added between \'" << label << "\' and \'" << current_node->label << "\'." << RESET << endl;
+    if (weight >= 1000)
+      cout << WHITE << "Connection removed between \'" << label << "\' and \'" << current_node->label << "\'." << RESET << endl;
+    else
+      cout << WHITE << "Connection added between \'" << label << "\' and \'" << current_node->label << "\'." << RESET << endl;
   }
   else cout << RED << "There is already a connection between these nodes." << RESET << endl;
 }
@@ -165,6 +171,10 @@ void CONNECT(bool connection_added){
   cout << GREEN << "$ What should the weight between these two nodes be?: " << RESET << flush;
   cin >> input2;
   float weight = stof(input2);
+  if (round(weight) >= 1000 || weight < 1){
+    cout << RED << "Weight must be between 1 and 999." << RESET << endl;
+    return;
+  }
   Graph::connect_nodes(input, input1, weight);
 }
 
@@ -231,7 +241,6 @@ string formatted_weight(float weight){
     return to_string(iweight);
 }
 
-
 void PRINT(){
   // PRINT function
   for (int i = 0; i < Graph::nodes.size(); i++)
@@ -256,11 +265,105 @@ void PRINT(){
   }
 }
 
+Graph::Node* Graph::find_smallest_distance(map<Graph::Node*, float> distances, const vector<Graph::Node*> unvisited_nodes){
+  // finds the smallest distance out of any unvisited node, returns nullptr if it doesn't exst
+  // i used 'distance' and 'weight' fairly interchangeably when making this program, but they do mean the same thing in this case
+  if (unvisited_nodes.size() == 0)
+    return nullptr;
+  float best_distance = default_weight;
+  Node* closest_node = nullptr;
+  for (Node* current_node : unvisited_nodes)
+    if (distances[current_node] < best_distance){
+      best_distance = distances[current_node];
+      closest_node = current_node;
+    }
+  if (best_distance >= 1000)
+    return nullptr;
+  return closest_node;
+}
+
+vector<Graph::Node*> Graph::dijkstra(Graph::Node* start, Graph::Node* end){
+  // dijkstra's algorithm for pathfinding
+  // en.wikipedia.org/wiki/Dijkstra's_algorithm
+  vector<Node*> unvisited_nodes = nodes;
+  map<Node*, float> distances;
+  map<Node*, Node*> previous; // stores the previous node in the current shortest chain
+  for (Node* current_node : nodes){ // populate distances
+    distances[current_node] = default_weight;
+    previous[current_node] = nullptr;
+  }
+  distances[start] = 0.0; // start always has a distance of 0 from itself
+  // start of loop
+  float base_distance = 0.0;
+  Node* current_node = find_smallest_distance(distances, unvisited_nodes);
+  while (current_node != nullptr && current_node != end){ // while there is a visitable, unvisited node (besides the end node, if the end node is the closest one then there is guaranteed to be no faster path)
+    base_distance = distances[current_node];
+    for (int i = 0; i < nodes.size(); i++){
+      Node* node = nodes[i];
+      if (node == current_node) continue; // no need to check this node
+      float distance = current_node->get_connection(i);
+      if (distance >= 10e9) continue; // infinity
+      distance += base_distance;
+      if (distance < distances[node]){ // if this path's distance is shorter than the previous minimum
+	distances[node] = distance; // update its distance with a new best
+	previous[node] = current_node; // update the previous node
+      }
+    }
+    erase(unvisited_nodes, current_node); // this node has been visited
+    current_node = find_smallest_distance(distances, unvisited_nodes);
+  }
+  total_weight = distances[end];
+  vector<Node*> path;
+  // now, populate path by starting at end and repeatedly appending previous to it
+  current_node = end;
+  path.push_back(current_node);
+  while (current_node != start){
+    current_node = previous[current_node];
+    if (current_node == nullptr) break;
+    path.push_back(current_node);
+  }
+  return path; // this will be backwards
+}
+
+void PATHFIND(){
+  // PATHFIND function
+  if (Graph::nodes.size() < 2){
+    cout << RED << "Add more nodes!" << RESET << endl;
+    return;
+  }
+  string input;
+  string input1;
+  cin.ignore();
+  cout << GREEN << "$ What is the starting node?: " << RESET << flush;
+  getline(cin, input);
+  cout << GREEN << "$ What is the ending node?: " << RESET << flush;
+  getline(cin, input1);
+  Graph::Node* start = Graph::lookup_node(input);
+  Graph::Node* end = Graph::lookup_node(input1);
+  if (start == nullptr || end == nullptr){
+    cout << RED << "One or both of those nodes doesn't exist!" << RESET << endl;
+    return;
+  }
+  cout << WHITE;
+  vector<Graph::Node*> path = Graph::dijkstra(start, end);
+  if (Graph::total_weight < 10e9){ // i can't ever get INFINITY to work consistently so i use a very large literal instead
+    for (int i = path.size(); i > 0; i--){
+      cout << path[i-1]->label;
+      if (i > 1)
+	cout << '>';
+    }
+    cout << endl;
+    cout << BLUE << Graph::total_weight << RESET << endl;
+  } else {
+    cout << "No valid path exists." << RESET << endl;
+  }
+}
+
 int main(){
   cout << YELLOW << "C++ Graph Creator - " << RESET << RED << "Version " << Graph::version << RESET << endl;
   cout << WHITE << "Type \'HELP\' for a list of commands." << endl;
   map<string, unsigned short> commands;
-  commands["HELP"] = 1; commands["ADD"] = 2; commands["CONNECT"] = 3; commands["REMOVE"] = 4; commands["DISCONNECT"] = 5; commands["PRINT"] = 6;
+  commands["HELP"] = 1; commands["ADD"] = 2; commands["CONNECT"] = 3; commands["REMOVE"] = 4; commands["DISCONNECT"] = 5; commands["PRINT"] = 6; commands["PATHFIND"] = 7;
   // ^ could use an enum for these values, after some point i might be overengineering this, a long if/else statement would work anyway
   string input;
   bool connection_added = false;
@@ -287,6 +390,7 @@ int main(){
 	"REMOVE: remove a node (vertex) from the graph" << '\n' <<
 	"DISCONNECT: remove a connection (line) from two nodes" << '\n' <<
 	"PRINT: print the adjacency table" << '\n' <<
+	"PATHFIND: find the shortest path between two nodes" << '\n' <<
 	endl;
       break;
       
@@ -303,12 +407,16 @@ int main(){
       REMOVE();
       break;
 
-    case 5:
+    case 5: // DISCONNECT
       DISCONNECT();
       break;
 
-    case 6:
+    case 6: // PRINT
       PRINT();
+      break;
+
+    case 7: // PATHFIND
+      PATHFIND();
       break;
       
     }
